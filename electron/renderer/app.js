@@ -67,9 +67,40 @@ window.onSessionExpired = (msg) => forceLogout(msg);
 
 function isAdmin() { return state.user?.role === "admin"; }
 
-function logActivity(action, page, details = null) {
+function logActivity(action, page, details = null, statusCode = null, errorMessage = null) {
   if (!entracteAPI.getToken() || !state.user) return;
-  entracteAPI.logActivity({ action, page, details: details || null }).catch(() => {});
+  entracteAPI.logActivity({
+    action,
+    page,
+    details: details || null,
+    status_code: statusCode,
+    error_message: errorMessage,
+  }).catch(() => {});
+}
+
+function formatLogStatus(code) {
+  if (code === null || code === undefined) return '<span class="log-status log-status-muted">N/A</span>';
+  if (code === 0) return '<span class="log-status log-status-offline">0</span>';
+  if (code >= 200 && code < 300) return `<span class="log-status log-status-ok">${code}</span>`;
+  if (code >= 400 && code < 500) return `<span class="log-status log-status-warn">${code}</span>`;
+  if (code >= 500) return `<span class="log-status log-status-err">${code}</span>`;
+  return `<span class="log-status log-status-muted">${code}</span>`;
+}
+
+function renderLogRows(rows) {
+  if (!rows.length) {
+    return '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted)">No log entries.</td></tr>';
+  }
+  return rows.map((row) => `
+    <tr class="${row.error_message ? "log-row-error" : ""}">
+      <td class="logs-time">${escHtml(new Date(row.created_at).toLocaleString())}</td>
+      <td><strong>${escHtml(row.user_name || row.username)}</strong><br><span class="logs-user">${escHtml(row.username)}</span></td>
+      <td>${escHtml(row.page || "N/A")}</td>
+      <td class="logs-action">${escHtml(row.action)}</td>
+      <td>${formatLogStatus(row.status_code)}</td>
+      <td class="logs-error">${row.error_message ? escHtml(row.error_message) : '<span class="logs-muted">OK</span>'}</td>
+      <td class="logs-details">${escHtml(row.details || "")}</td>
+    </tr>`).join("");
 }
 
 function emptyCell(val) { return val || "N/A"; }
@@ -283,9 +314,18 @@ function showModal(title, bodyHTML, actionsHTML, options = {}) {
 }
 
 async function waitForBackend(retries = 20) {
+  window.__currentPage = "login";
+  let lastErr = "Server not ready. Please wait and try again.";
   for (let i = 0; i < retries; i++) {
-    try { await entracteAPI.health(); return true; } catch { await new Promise((r) => setTimeout(r, 800)); }
+    try {
+      await entracteAPI.health();
+      return true;
+    } catch (err) {
+      lastErr = err.message || lastErr;
+      await new Promise((r) => setTimeout(r, 800));
+    }
   }
+  entracteAPI.logApiStep("GET", "/health", 0, lastErr);
   return false;
 }
 
@@ -303,6 +343,7 @@ function buildNav() {
 }
 
 function navigateTo(page) {
+  window.__currentPage = page;
   if (!entracteAPI.getToken()) {
     forceLogout("Please sign in to continue.");
     return;
@@ -2249,7 +2290,7 @@ async function renderLogs(container) {
       <div class="toolbar" style="margin:0">
         <div class="search-wrap" style="min-width:240px">
           <i data-lucide="search"></i>
-          <input id="logs-search" placeholder="Search action, user, page...">
+          <input id="logs-search" placeholder="Search action, user, error, page...">
         </div>
         <button class="btn btn-secondary btn-sm" id="logs-refresh"><i data-lucide="refresh-cw"></i> Refresh</button>
       </div>
@@ -2263,26 +2304,17 @@ async function renderLogs(container) {
                 <th>Time</th>
                 <th>User</th>
                 <th>Page</th>
-                <th>Action</th>
+                <th>Step</th>
+                <th>Status</th>
+                <th>Error</th>
                 <th>Details</th>
               </tr>
             </thead>
-            <tbody id="logs-tbody">
-              ${logs.length === 0
-    ? '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted)">No activity logged yet.</td></tr>'
-    : logs.map((row) => `
-                <tr>
-                  <td class="logs-time">${escHtml(new Date(row.created_at).toLocaleString())}</td>
-                  <td><strong>${escHtml(row.user_name || row.username)}</strong><br><span class="logs-user">${escHtml(row.username)}</span></td>
-                  <td>${escHtml(row.page || "N/A")}</td>
-                  <td>${escHtml(row.action)}</td>
-                  <td class="logs-details">${escHtml(row.details || "")}</td>
-                </tr>`).join("")}
-            </tbody>
+            <tbody id="logs-tbody">${renderLogRows(logs)}</tbody>
           </table>
         </div>
       </div>
-      <p style="font-size:.8rem;color:var(--text-muted);margin-top:12px">Showing latest ${logs.length} entries. Sign-ins, page views, and key actions are recorded automatically.</p>
+      <p style="font-size:.8rem;color:var(--text-muted);margin-top:12px">Each API step is logged with HTTP status. Errors show the exact message returned. Latest ${logs.length} entries.</p>
     </div>`;
   icons();
 
@@ -2291,16 +2323,7 @@ async function renderLogs(container) {
     const rows = await entracteAPI.getActivityLogs({ limit: 500, search: search || undefined });
     const tbody = document.getElementById("logs-tbody");
     if (!tbody) return;
-    tbody.innerHTML = rows.length === 0
-      ? '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted)">No matching log entries.</td></tr>'
-      : rows.map((row) => `
-          <tr>
-            <td class="logs-time">${escHtml(new Date(row.created_at).toLocaleString())}</td>
-            <td><strong>${escHtml(row.user_name || row.username)}</strong><br><span class="logs-user">${escHtml(row.username)}</span></td>
-            <td>${escHtml(row.page || "N/A")}</td>
-            <td>${escHtml(row.action)}</td>
-            <td class="logs-details">${escHtml(row.details || "")}</td>
-          </tr>`).join("");
+    tbody.innerHTML = renderLogRows(rows);
   }, 300);
 
   document.getElementById("logs-search")?.addEventListener("input", filterLogs);
@@ -2484,6 +2507,7 @@ document.getElementById("clear-session-btn")?.addEventListener("click", () => {
 // Init — always start at login screen
 document.addEventListener("DOMContentLoaded", () => {
   entracteAPI.clearToken();
+  window.__currentPage = "login";
   document.documentElement.setAttribute("data-theme", "dark");
   initSidebar();
   document.getElementById("sidebar-end-shift")?.addEventListener("click", () => showEndShiftModal());

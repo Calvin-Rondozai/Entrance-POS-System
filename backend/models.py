@@ -252,21 +252,8 @@ class ActivityLog(Base):
     user_name = Column(String(200), nullable=True)
     action = Column(String(300), nullable=False)
     page = Column(String(100), nullable=True, index=True)
-    details = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-
-    employee = relationship("Employee")
-
-
-class ActivityLog(Base):
-    __tablename__ = "activity_logs"
-
-    id = Column(Integer, primary_key=True, index=True)
-    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=True)
-    username = Column(String(100), nullable=False, index=True)
-    user_name = Column(String(200), nullable=True)
-    action = Column(String(200), nullable=False)
-    page = Column(String(100), nullable=True, index=True)
+    status_code = Column(Integer, nullable=True)
+    error_message = Column(Text, nullable=True)
     details = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
 
 
@@ -447,6 +447,18 @@ class ImportResult(BaseModel):
 class ActivityLogCreate(BaseModel):
     action: str = Field(min_length=1, max_length=300)
     page: Optional[str] = Field(None, max_length=100)
+    status_code: Optional[int] = None
+    error_message: Optional[str] = Field(None, max_length=2000)
+    details: Optional[str] = Field(None, max_length=2000)
+
+
+class ActivityLogEvent(BaseModel):
+    """Pre-auth events (login / health checks only)."""
+    action: str = Field(min_length=1, max_length=300)
+    page: Literal["login", "system"]
+    username: Optional[str] = Field(None, max_length=100)
+    status_code: Optional[int] = None
+    error_message: Optional[str] = Field(None, max_length=2000)
     details: Optional[str] = Field(None, max_length=2000)
 
 
@@ -457,24 +469,8 @@ class ActivityLogResponse(BaseModel):
     user_name: Optional[str] = None
     action: str
     page: Optional[str] = None
-    details: Optional[str] = None
-    created_at: datetime
-    model_config = {"from_attributes": True}
-
-
-class ActivityLogCreate(BaseModel):
-    action: str = Field(min_length=1, max_length=200)
-    page: Optional[str] = Field(None, max_length=100)
-    details: Optional[str] = Field(None, max_length=2000)
-
-
-class ActivityLogResponse(BaseModel):
-    id: int
-    employee_id: Optional[int] = None
-    username: str
-    user_name: Optional[str] = None
-    action: str
-    page: Optional[str] = None
+    status_code: Optional[int] = None
+    error_message: Optional[str] = None
     details: Optional[str] = None
     created_at: datetime
     model_config = {"from_attributes": True}

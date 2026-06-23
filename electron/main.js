@@ -35,10 +35,12 @@ function startBackend() {
     ["-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000"],
     { cwd: backendPath, shell: true }
   );
-  if (isDev) {
-    pythonProcess.stdout.on("data", (d) => console.log(`[Backend] ${d}`));
-    pythonProcess.stderr.on("data", (d) => console.error(`[Backend] ${d}`));
-  }
+  pythonProcess.stdout.on("data", (d) => console.log(`[Backend] ${d}`));
+  pythonProcess.stderr.on("data", (d) => console.error(`[Backend] ${d}`));
+  pythonProcess.on("error", (err) => console.error("[Backend] failed to start:", err.message));
+  pythonProcess.on("exit", (code) => {
+    if (code !== null && code !== 0) console.error(`[Backend] exited with code ${code}`);
+  });
 }
 
 function createWindow() {

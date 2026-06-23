@@ -29,7 +29,7 @@ from schemas import (
     OutOfStockResponse, ImportResult,
     ShopCreate, ShopUpdate, ShopResponse,
     CashSessionOpen, CashSessionClose, CashSessionResponse, ShiftReconcilePreview,
-    ActivityLogCreate, ActivityLogResponse,
+    ActivityLogCreate, ActivityLogResponse, ActivityLogEvent,
 )
 from auth import hash_pin, verify_pin, create_access_token
 from deps import get_current_user, require_admin
@@ -90,6 +90,8 @@ def run_migrations():
             created_at DATETIME,
             FOREIGN KEY(employee_id) REFERENCES employees(id)
         )""",
+        "ALTER TABLE activity_logs ADD COLUMN status_code INTEGER",
+        "ALTER TABLE activity_logs ADD COLUMN error_message TEXT",
     ]
     with engine.connect() as conn:
         for sql in migrations:
@@ -276,6 +278,8 @@ def write_activity_log(
     action: str,
     page: Optional[str] = None,
     details: Optional[str] = None,
+    status_code: Optional[int] = None,
+    error_message: Optional[str] = None,
 ):
     entry = ActivityLog(
         employee_id=user.id,
@@ -284,6 +288,8 @@ def write_activity_log(
         action=action,
         page=page,
         details=details,
+        status_code=status_code,
+        error_message=error_message,
     )
     db.add(entry)
     db.commit()
@@ -297,9 +303,18 @@ def login(credentials: EmployeeLogin, db: Session = Depends(get_db)):
         Employee.is_active == True,
     ).first()
     if not employee or not verify_pin(credentials.password, employee.pin_hash):
+        db.add(ActivityLog(
+            username=credentials.username,
+            user_name=None,
+            action="POST /auth/login",
+            page="login",
+            status_code=401,
+            error_message="Invalid username or password",
+        ))
+        db.commit()
         raise HTTPException(status_code=401, detail="Invalid username or password")
     token = create_access_token(employee.id, employee.role)
-    write_activity_log(db, employee, "Signed in", "login", f"role={employee.role}")
+    write_activity_log(db, employee, "POST /auth/login", "login", f"role={employee.role}", status_code=200)
     return LoginResponse(employee=employee_to_response(employee, db), token=token)
 
 
@@ -1273,6 +1288,24 @@ def update_settings(data: SettingsUpdate, db: Session = Depends(get_db), admin: 
 
 
 # --- Activity logs ---
+@app.post("/api/activity-logs/event", response_model=ActivityLogResponse)
+def log_public_event(data: ActivityLogEvent, db: Session = Depends(get_db)):
+    entry = ActivityLog(
+        employee_id=None,
+        username=data.username or "system",
+        user_name=None,
+        action=data.action,
+        page=data.page,
+        status_code=data.status_code,
+        error_message=data.error_message,
+        details=data.details,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
 @app.post("/api/activity-logs", response_model=ActivityLogResponse)
 def create_activity_log(
     data: ActivityLogCreate,
@@ -1285,6 +1318,8 @@ def create_activity_log(
         user_name=user.name,
         action=data.action,
         page=data.page,
+        status_code=data.status_code,
+        error_message=data.error_message,
         details=data.details,
     )
     db.add(entry)
@@ -1309,6 +1344,7 @@ def list_activity_logs(
         q = q.filter(or_(
             ActivityLog.action.ilike(term),
             ActivityLog.details.ilike(term),
+            ActivityLog.error_message.ilike(term),
             ActivityLog.username.ilike(term),
             ActivityLog.user_name.ilike(term),
             ActivityLog.page.ilike(term),

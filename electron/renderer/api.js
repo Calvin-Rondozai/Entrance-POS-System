@@ -23,14 +23,62 @@ function loadingEnd() {
   if (loadingCount === 0) document.getElementById("global-loading")?.classList.add("hidden");
 }
 
+function currentLogPage() {
+  return window.__currentPage || "login";
+}
+
+async function postActivityLog(payload) {
+  if (payload.action?.startsWith("POST /activity-logs")) return;
+  const page = payload.page || currentLogPage();
+  const body = { ...payload, page };
+
+  try {
+    if (!authToken && (page === "login" || page === "system")) {
+      body.username = body.username || window.__loginUsername || "system";
+      await fetch(`${API_BASE}/activity-logs/event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        auth: false,
+      });
+      return;
+    }
+    if (!authToken) return;
+    await fetch(`${API_BASE}/activity-logs`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${syncTokenFromStorage()}`,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    /* never block UI for logging */
+  }
+}
+
+function logApiStep(method, endpoint, statusCode, errorMessage = null, details = null) {
+  if (endpoint.startsWith("/activity-logs")) return;
+  postActivityLog({
+    action: `${method} ${endpoint}`,
+    page: currentLogPage(),
+    status_code: statusCode,
+    error_message: errorMessage,
+    details,
+  });
+}
+
 async function api(endpoint, options = {}) {
   const silent = options.silent;
   const loadingMessage = options.loadingMessage;
   const skipSessionHandler = options.skipSessionHandler;
+  const skipActivityLog = options.skipActivityLog;
+  const method = (options.method || "GET").toUpperCase();
   const opts = { ...options };
   delete opts.silent;
   delete opts.loadingMessage;
   delete opts.skipSessionHandler;
+  delete opts.skipActivityLog;
 
   if (!silent) loadingStart(loadingMessage || "Loading...");
 
@@ -57,8 +105,10 @@ async function api(endpoint, options = {}) {
     let res;
     try {
       res = await fetch(`${API_BASE}${endpoint}`, config);
-    } catch {
-      throw new Error("Cannot reach server. Wait a few seconds and try again, or restart the app.");
+    } catch (networkErr) {
+      const msg = "Cannot reach server. Wait a few seconds and try again, or restart the app.";
+      if (!skipActivityLog) logApiStep(method, endpoint, 0, msg, networkErr.message || null);
+      throw new Error(msg);
     }
 
     if (res.status === 401) {
@@ -66,10 +116,12 @@ async function api(endpoint, options = {}) {
       if (isPublic || isLogin) {
         const err = await res.json().catch(() => ({ detail: "Invalid username or password" }));
         const msg = typeof err.detail === "string" ? err.detail : "Invalid username or password";
+        if (!skipActivityLog && isLogin) logApiStep(method, endpoint, 401, msg);
         throw new Error(msg);
       }
       const errBody = await res.json().catch(() => ({}));
       const detail = typeof errBody.detail === "string" ? errBody.detail : "Session expired";
+      if (!skipActivityLog) logApiStep(method, endpoint, 401, detail);
       if (hadToken && !loginInProgress && !skipSessionHandler) {
         authToken = "";
         localStorage.removeItem("entracte_token");
@@ -84,7 +136,9 @@ async function api(endpoint, options = {}) {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       if (res.status === 409 && err.detail && typeof err.detail === "object") {
-        const e = new Error(err.detail.message || "Shift does not balance");
+        const msg = err.detail.message || "Shift does not balance";
+        if (!skipActivityLog) logApiStep(method, endpoint, 409, msg);
+        const e = new Error(msg);
         e.code = 409;
         e.reconcile = err.detail;
         throw e;
@@ -92,8 +146,11 @@ async function api(endpoint, options = {}) {
       let msg = typeof err.detail === "string" ? err.detail : JSON.stringify(err.detail);
       if (res.status === 404) msg = `API not found (${endpoint}). Restart the app to load the latest server.`;
       if (res.status === 500) msg = msg || "Internal server error. Check server logs.";
+      if (!skipActivityLog) logApiStep(method, endpoint, res.status, msg || "Request failed");
       throw new Error(msg || "Request failed");
     }
+
+    if (!skipActivityLog) logApiStep(method, endpoint, res.status);
 
     const ct = res.headers.get("content-type") || "";
     if (ct.includes("text/csv")) return res.blob();
@@ -127,8 +184,10 @@ async function downloadCsv(endpoint, filename) {
 window.entracteAPI = {
   setToken, clearToken, getToken: () => syncTokenFromStorage(),
   setLoginInProgress: (v) => { loginInProgress = !!v; },
+  logApiStep,
   login: async (username, password) => {
     loginInProgress = true;
+    window.__loginUsername = username;
     try {
       clearToken();
       const res = await api("/auth/login", {
@@ -194,7 +253,7 @@ window.entracteAPI = {
   createShop: (data) => api("/shops", { method: "POST", body: data }),
   updateShop: (id, data) => api(`/shops/${id}`, { method: "PUT", body: data }),
   deleteShop: (id) => api(`/shops/${id}`, { method: "DELETE" }),
-  getCurrentSession: () => api("/cash-sessions/current", { silent: true, skipSessionHandler: true }),
+  getCurrentSession: () => api("/cash-sessions/current", { silent: true, skipSessionHandler: true, skipActivityLog: true }),
   openSession: (data) => api("/cash-sessions/open", { method: "POST", body: data }),
   closeSession: (data) => api("/cash-sessions/close", { method: "POST", body: data }),
   reconcileSession: (closingCash, closingCard = 0, closingMobile = 0) =>
@@ -212,6 +271,6 @@ window.entracteAPI = {
     const qs = new URLSearchParams(params).toString();
     return api(`/activity-logs${qs ? "?" + qs : ""}`);
   },
-  logActivity: (data) => api("/activity-logs", { method: "POST", body: data, silent: true, skipSessionHandler: true }),
-  health: () => api("/health", { auth: false, silent: true }),
+  logActivity: (data) => api("/activity-logs", { method: "POST", body: data, silent: true, skipSessionHandler: true, skipActivityLog: true }),
+  health: () => api("/health", { auth: false, silent: true, skipActivityLog: true }),
 };
