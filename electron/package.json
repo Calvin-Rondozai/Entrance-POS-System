@@ -1,0 +1,13 @@
+{
+  "name": "nexuspos",
+  "version": "1.0.0",
+  "description": "NexusPOS - Professional Point of Sale System",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1"
+  }
+}

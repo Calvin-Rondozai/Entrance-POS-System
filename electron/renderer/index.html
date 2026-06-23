@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entracte POS</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div id="toast-container"></div>
+
+  <div id="app">
+    <div id="login-screen" class="login-screen login-v2">
+      <header class="login-topbar">
+        <div class="login-brand-mark">
+          <span class="login-brand-dot"></span>
+          <span class="login-brand-text">Entracte POS</span>
+        </div>
+      </header>
+
+      <div class="login-split">
+        <div class="login-form-side">
+          <p class="login-eyebrow">WELCOME BACK</p>
+          <h1 class="login-hero">Sign in<span class="login-hero-dot">.</span></h1>
+          <p class="login-hint">Use your cashier or admin credentials to continue</p>
+
+          <form id="login-form" class="login-form-v2">
+            <div class="login-field">
+              <label for="login-username">Username</label>
+              <div class="login-input-wrap">
+                <input type="text" id="login-username" autocomplete="username" required autofocus placeholder="your.username">
+                <span class="login-input-icon" aria-hidden="true"><i data-lucide="user"></i></span>
+              </div>
+            </div>
+
+            <div class="login-field">
+              <label for="login-password">Password</label>
+              <div class="login-input-wrap">
+                <input type="password" id="login-password" autocomplete="current-password" required placeholder="••••••••">
+                <button type="button" class="login-input-icon-btn" id="toggle-password" aria-label="Show password">
+                  <i data-lucide="eye"></i>
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" class="login-submit-btn" id="login-btn"><span>Sign in</span></button>
+            <div id="login-error" class="login-error hidden"></div>
+          </form>
+
+          <button type="button" class="login-clear-btn" id="clear-session-btn">Clear saved session</button>
+        </div>
+
+        <div class="login-visual-side" aria-hidden="true">
+          <div class="login-visual-bg"></div>
+          <div class="login-visual-overlay"></div>
+          <div class="login-visual-content">
+            <img src="ES.png" alt="" class="login-visual-logo">
+            <p class="login-visual-tagline">Professional point of sale for modern retail</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="main-app" class="hidden">
+      <div class="app-shell">
+        <aside id="sidebar" class="sidebar">
+          <div class="sidebar-top">
+            <div class="sidebar-brand" id="sidebar-brand">
+              <img src="ES.png" alt="Entracte" class="brand-logo">
+              <div class="brand-text">
+                <span class="brand-name">Entracte</span>
+                <span class="brand-store" id="store-name-display">Store</span>
+              </div>
+            </div>
+            <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Collapse sidebar"></button>
+          </div>
+          <nav id="sidebar-nav" class="sidebar-nav"></nav>
+          <div class="sidebar-footer">
+            <div class="user-chip">
+              <div class="user-avatar" id="user-avatar">A</div>
+              <div class="user-meta">
+                <span class="user-name" id="user-name">User</span>
+                <span class="user-role" id="user-role">Role</span>
+              </div>
+            </div>
+            <div id="shift-status" class="shift-status hidden"></div>
+            <button type="button" class="btn btn-ghost btn-sm w-full hidden" id="sidebar-end-shift">
+              <i data-lucide="wallet"></i> <span class="nav-label">End shift</span>
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm w-full" id="logout-btn">
+              <i data-lucide="log-out"></i> <span class="nav-label">Sign out</span>
+            </button>
+          </div>
+        </aside>
+        <main class="main-content">
+          <div id="page-content"></div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-container"></div>
+
+  <div id="global-loading" class="global-loading hidden" aria-live="polite" aria-busy="true">
+    <div class="global-loading-card">
+      <div class="spinner"></div>
+      <div class="loading-text" id="loading-text">Loading...</div>
+    </div>
+  </div>
+
+  <script src="notifications.js"></script>
+  <script src="receipt.js"></script>
+  <script src="api.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
